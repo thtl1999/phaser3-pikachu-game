@@ -25,7 +25,7 @@ var status = 'jump'          //jump, walk, slide, power
 var has_control = true
 var power_active = false
 var power_cooling = false
-var power_ball = false
+var ball_power = 1
 var sounds = {}
 var bgm
 var phy
@@ -37,7 +37,10 @@ var config = {
     type: Phaser.AUTO,
     width: WIDTH,
     height: HEIGHT,
-    fps: fps,
+    fps: {
+        target: fps,
+        forceSetTimeOut: true
+    },
     scene: {
         preload: preload,
         create: create,
@@ -60,6 +63,7 @@ var config = {
 
 var game = new Phaser.Game(config);
 var s
+var test
 
 function preload ()
 {
@@ -115,6 +119,8 @@ async function create ()
     ground_group = this.physics.add.staticGroup();
     ground = ground_group.create(-TILE_SIZE, TILE_SIZE*17.5, 'sprite_bg', 'sand').setDisplayOrigin(0,0).setScale(WIDTH/TILE_SIZE + 2,1).setAlpha(0).refreshBody()
     
+    ///////////////////////* ball *////////////////////////
+
     var ball_texture = this.textures.get('sprite_ball')
     ball_texture.add('ball',0, 0,0,40,40)
     ball_texture.add('hit',0, 0,40,40,40)
@@ -128,10 +134,54 @@ async function create ()
     ball.setGravityY(GRAVITY*0.5)
     ball.setVelocityY(200)
     ball.body.setAllowRotation()
-    
+    ball.setDepth(5)
 
-    this.add.image(50,50,'sprite_bg','cloud')
+    this.anims.create({
+        key: 'anim_power_ball',
+        frames: this.anims.generateFrameNumbers('sprite_ball', { start: 6, end: 7 }),
+        frameRate: 30,
+        repeat: 0
+    });
 
+
+    ///////////////////////* cloud *////////////////////////
+
+    // var cloud = this.add.image(50,50,'sprite_bg','cloud')
+    var clouds_a = []
+    var clouds_b = []
+    for(var i=0;i<10;i++){
+        var cloud = this.add.image(Phaser.Math.Between(-WIDTH, 0),Phaser.Math.Between(0, HEIGHT/3) ,'sprite_bg','cloud')
+        clouds_a.push(cloud)
+        var cloud = this.add.image(Phaser.Math.Between(-WIDTH, 0),Phaser.Math.Between(0, HEIGHT/3) ,'sprite_bg','cloud')
+        clouds_b.push(cloud)
+    }
+
+    this.tweens.add({
+        targets     : clouds_a,
+        duration: 200,
+        repeat: -1,
+        yoyo: true,
+        props: {
+            x: {value: '+=' + String(WIDTH*2), duration: 6000, ease: 'Linear', yoyo: false},
+            scaleX: 1.2,
+            scaleY: 1.2,
+        }
+    });
+
+    this.tweens.add({
+        delay: 3000,
+        targets     : clouds_b,
+        duration: 200,
+        repeat: -1,
+        yoyo: true,
+        props: {
+            x: {value: '+=' + String(WIDTH*2), duration: 6000, ease: 'Linear', yoyo: false},
+            scaleX: 1.2,
+            scaleY: 1.2,
+        }
+    });
+
+    ///////////////////////* player pikachu *////////////////////////
 
     player = this.physics.add.sprite(100, 100, 'sprite_pikachu')
     player.setCollideWorldBounds(true)
@@ -140,6 +190,7 @@ async function create ()
     
     if (position) player.flipX = true
     
+    ///////////////////////* animations *////////////////////////
 
     this.anims.create({
         key: 'anim_walk',
@@ -185,6 +236,9 @@ async function create ()
         repeat: 0
     });
 
+
+    ///////////////////////* sound *////////////////////////
+
     bgm = this.sound.add('sound_bgm',{loop: true})
     // bgm.play()
     sounds['chu'] = this.sound.add('sound_chu')
@@ -193,6 +247,7 @@ async function create ()
 
     cursors = this.input.keyboard.createCursorKeys()
 
+    ///////////////////////* physics *////////////////////////
 
     this.physics.add.collider(ball, ground)
     this.physics.add.overlap(player, ball, hit_ball, null, this)
@@ -215,6 +270,11 @@ function update()
     // else{
         
     // }
+
+    if (ball_power === 2){
+        ball_after_image(this)
+    }
+
 
     if (has_control){
         player.anims.play('anim_' + status, true)
@@ -281,6 +341,7 @@ function on_ground(player, ball){
 
 async function hit_ball(player, ball){
 
+    
     if (ball.body.wasTouching.none === false) return;
     
     //speed up
@@ -291,9 +352,17 @@ async function hit_ball(player, ball){
     }
     
 
-    if (power_ball === true){
-        
-        await power_ball_status(false)
+    if (power_active === true){
+        ball_power = 2
+    }
+    else if (ball_power === 2){
+        ball_power = 0.75
+    }
+    else if (ball_power === 0.75){
+        ball_power = 0.875
+    }
+    else{   // 0.875 -> 1
+        ball_power = 1
     }
 
 
@@ -305,27 +374,41 @@ async function hit_ball(player, ball){
         var bounce = this.physics.velocityFromRotation(angle,ball_vector.length() + player_vector.length()*Math.abs(Math.sin(angle/2)))
         
         ball.setVelocity(bounce.x,bounce.y)
+        
     }
     else{
-        var power = 1
         var amp = 1.5
         var base_velocity = 100
         var angle_bonus = 150
         var angle = Phaser.Math.Angle.BetweenPoints(player, ball)
 
-        if (status === 'power'){
-            power = power*2
-            power_ball_status(true)
-        }
-
-        var bounce = this.physics.velocityFromRotation(angle,BALL_SPEED*power*(base_velocity + ball.y*amp + angle_bonus*Math.abs(angle+Math.PI/2)))
+        var bounce = this.physics.velocityFromRotation(angle,BALL_SPEED*ball_power*(base_velocity + ball.y*amp + angle_bonus*Math.abs(Math.abs(angle)-Math.PI/2)))
 
 
         ball.setVelocity(bounce.x,bounce.y)
+        ball.body.angularVelocity = ball.body.speed * bounce.x/Math.abs(bounce.x)
     }
     
     
 }
+
+function ball_after_image(scene){
+    var bai = scene.add.sprite(ball.x,ball.y,'sprite_ball','ball')
+    bai.anims.play('anim_power_ball', false)
+    bai.once('animationcomplete', () => {
+        bai.destroy()
+    })
+}
+
+function ball_hit_image(scene){
+    //game.add.tween(sprite.scale).to( { x: 2, y: 2 }, 2000, Phaser.Easing.Linear.None, true);
+    var hit = scene.add.sprite(ball.x,ball.y,'sprite_ball','hit')
+    bai.anims.play('anim_power_ball', false)
+    bai.once('animationcomplete', () => {
+        bai.destroy()
+    })
+}
+
 
 function change_game_speed(scene, speed){
     game_speed = speed
@@ -333,17 +416,6 @@ function change_game_speed(scene, speed){
     
 }
 
-
-function power_ball_status(bool){
-    if (bool === true){
-        
-        power_ball = true
-    }
-    else{
-        
-        power_ball = false
-    }
-}
 
 
 function slowdown(scene, bool){
