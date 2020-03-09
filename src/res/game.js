@@ -9,6 +9,8 @@ const GROUND_Y = TILE_SIZE*17.5
 const PLAYER_Y = GROUND_Y - (PLAYER_OFFSET.y + PLAYER_OFFSET.r) + 1 //prevent sterturing
 const POWER_DUR = 500
 const POWER_COOLTIME = 1000
+const SLIDE_COOLTIME_A = 550
+const SLIDE_COOLTIME_B = 850
 const BALL_SPEED = 1
 const REALISTIC = false
 
@@ -146,7 +148,6 @@ async function create ()
 
     ///////////////////////* cloud *////////////////////////
 
-    // var cloud = this.add.image(50,50,'sprite_bg','cloud')
     var clouds_a = []
     var clouds_b = []
     for(var i=0;i<10;i++){
@@ -317,6 +318,34 @@ function update()
                 power_active = false
                 if (status === 'power') status = 'jump'
             })
+        }
+
+        if (cursors.space.isDown && status === 'walk' && (cursors.left.isDown || cursors.right.isDown)){
+            var direction
+            if (cursors.left.isDown){
+                direction = -1
+                player.flipX = true
+            }
+                
+            else{
+                direction = 1
+                player.flipX = false
+            }
+                
+
+            sounds['chu'].play()
+            status = 'slide'
+            player.anims.play('anim_slide', true)
+            has_control = false
+            this.time.delayedCall(SLIDE_COOLTIME_A/game_speed, () => {player.setVelocity(0,0)})
+            this.time.delayedCall(SLIDE_COOLTIME_B/game_speed, () => {
+                has_control = true
+                if (position) player.flipX = true
+                status = 'walk'
+            })
+
+            player.setVelocity(direction*PLAYER_SPEED*1.5,-PLAYER_JUMP*0.5)
+
         }
 
         
